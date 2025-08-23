@@ -55,73 +55,6 @@ def clean_chunk(chunk: str) -> str:
 # Set up Gemini LLM
 llm = LLM(model="gemini/gemini-1.5-flash", api_key=GOOGLE_API_KEY)
 
-
-# async def generate_agent_response(user_query: str, context_chunks: List[str]) -> str:
-#     cleaned_chunks = [clean_chunk(chunk)
-#                       for chunk in context_chunks if chunk.strip()]
-#     context = "\n\n".join(cleaned_chunks[:10])
-
-#     # Define Agent
-#     agent = Agent(
-#         name="PDF Intelligence Analyst",
-#         role="Advanced PDF Content Interpreter",
-#         goal=(
-#             "To assist users by accurately analyzing and extracting relevant insights from academic or medical PDFs. "
-#             "The agent ensures that every answer is grounded in the provided context, delivering clarity, factual accuracy, and relevance."
-#         ),
-#         backstory=(
-#             "You are a highly capable AI specialized in interpreting structured and unstructured data from PDF documents, "
-#             "particularly academic research, scientific papers, and medical literature. You are trained to locate and summarize "
-#             "the most relevant information, avoiding speculation or unsupported conclusions. "
-#             "Your responses are grounded in the content and avoid hallucination. "
-#             "You are helpful, logical, and precise. If the content is ambiguous, irrelevant, or insufficient, you must acknowledge that clearly. "
-#             "You are also capable of handling follow-up questions, drawing from prior context only when explicitly reloaded. "
-#             "You always respond concisely in 5–10 well-structured sentences, using bullet points if clarity can be improved. "
-#             "You do not include any personal opinions or assumptions. "
-#             "When appropriate, you refer directly to facts or sections of the PDF, without quoting excessively."
-#         ),
-#         llm=llm,
-#         verbose=True,
-#     )
-
-#     # Define Task
-#     task = Task(
-#         description=f"""
-# Context:
-# ---------
-# {context}
-
-# Question:
-# ---------
-# {user_query}
-
-# Instructions:
-# -------------
-# - Read the question carefully and locate the most relevant section in the context.
-# - Do **not** fabricate or assume any information not present in the context.
-# - If you **cannot** find a sufficient answer based on the context, respond with:
-#   `"The provided document does not contain enough information to answer this question accurately."`
-# - When answering, prefer clear and concise language (5–10 well-structured sentences).
-# - Where helpful, use numbered points or short bullet lists to improve readability.
-# - Do not quote large blocks from the PDF—summarize meaningfully instead.
-# - Focus on factual precision, especially when answering technical or scientific queries.
-
-# Your output should be informative, clear, and directly related to the user's query.
-#         """,
-#         expected_output="An informative, concise response (5–10 sentences), grounded in the context. No assumptions or hallucinations.",
-#         agent=agent,
-#     )
-
-#     # Run with Crew
-#     crew = Crew(
-#         agents=[agent],
-#         tasks=[task],
-#         verbose=True,
-#         llm=llm,
-#     )
-#     response = await asyncio.create_task(crew.kickoff_async())
-#     # result = crew.kickoff()  # synchronous call (or use await kickoff_async() if needed)
-#     return response
 async def generate_agent_response(user_query: str, context_chunks: List[str]) -> str:
     cleaned_chunks = [clean_chunk(chunk)
                       for chunk in context_chunks if chunk.strip()]
@@ -251,7 +184,8 @@ def parse_pdf_file(file_bytes: bytes):
     return "\n".join(output_text)
 
 def parse_pptx_file(file_bytes: bytes):
-    prs = Presentation(file_bytes)
+    pptx_file = BytesIO(file_bytes)
+    prs = Presentation(pptx_file)
     output_text = []
     for slide in prs.slides:
         for shape in slide.shapes:
@@ -491,8 +425,6 @@ def rerank_by_keyword_overlap(results, query_keywords):
 
 
 # ─── API Endpoints ───
-
-
 @app.post("/upload/")
 async def upload_files(files: List[UploadFile] = File(...)):
     uploaded_titles = []
@@ -506,9 +438,6 @@ async def upload_files(files: List[UploadFile] = File(...)):
         uploaded_titles.append(title)
     return {"message": "✅ Files processed successfully", "uploaded_titles": uploaded_titles}
 
-# @app.post("/query/", response_model=List[QueryResponse])
-
-
 @app.post("/query/")
 async def query_pdf(req: QueryRequest):
     matches = retrieve_query_results(req.question)
@@ -516,9 +445,7 @@ async def query_pdf(req: QueryRequest):
     if not matches:
         return JSONResponse(content={"message": "No data available", "results": []}, status_code=200)
     print("Query will return results")
-    # Extract context for AI agent
-    # Group chunks by book
-    # Normalize scores
+    # Extract context for AI agent # Group chunks by book Normalize scores
     max_score = max(match["score"] for match in matches) or 1e-6
     for match in matches:
         match["norm_score"] = match["score"] / max_score
@@ -534,25 +461,6 @@ async def query_pdf(req: QueryRequest):
             book_chunks[book].append(chunk)
             book_scores[book].append(match["norm_score"])
     print(f"Found {len(book_chunks)} books with matching chunks")
-    # Add AI agent result
-    # responses = [
-    #     QueryResponse(
-    #         book=match["metadata"].get("book_title", "Unknown"),
-    #         score=match["score"],
-    #         text=clean_chunk(match["metadata"].get("chunk_text", ""))
-    #     )
-    #     for match in matches
-    # ]
-
-    # Add AI agent result at the beginning
-    # responses.insert(0, QueryResponse(
-    #     book="AI Agent",
-    #     score=1.0,  # you can keep it highest or just use -1 if not used
-    #     text=str(agent_output.raw)
-    # ))
-
-    # return responses
-
     book_responses = []
 
     for book, chunks in book_chunks.items():
@@ -568,28 +476,6 @@ async def query_pdf(req: QueryRequest):
 
     return JSONResponse(content={"results": book_responses}, status_code=200)
 
-    # return {
-    #     # ✅ Only return agent’s summarized paragraphPDF Content Analyzer
-    #     "agent_response": str(agent_output.raw)
-    # }
-
-
-# @app.post("/query/", response_model=List[QueryResponse])
-# async def query_pdf(req: QueryRequest):
-#     matches = retrieve_query_results(req.question)
-#     print(" quesry started")
-
-#     if not matches:
-#         return JSONResponse(content={"message": "No data available", "results": []}, status_code=200)
-#     print(" quesry  will returnr started")
-#     return [
-#         QueryResponse(
-#             book=match["metadata"].get("book_title", "Unknown"),
-#             score=match["score"],
-#             text=match["metadata"].get("chunk_text", "")
-#         )
-#         for match in matches
-#     ]
 class QueryMeRequest(BaseModel):
     question: str
     book_names: List[str]  # List of book/pdf names to filter on
@@ -604,13 +490,6 @@ async def query_pdf_with_filter(req: QueryMeRequest):
 
     if not all_matches:
         return JSONResponse(content={"message": "No data available", "results": []}, status_code=200)
-
-    # print(f"Filtering matches to specified books: {req.book_names}")
-    # # Filter matches based on the list of book names
-    # filtered_matches = [
-    #     match for match in all_matches
-    #     if match["metadata"].get("book_title", "").strip() in req.book_names
-    # ]
 
     # Normalize scores
     max_score = max(match["score"] for match in all_matches) or 1e-6
@@ -648,7 +527,6 @@ async def query_pdf_with_filter(req: QueryMeRequest):
 @app.get("/")
 def hello():
     return {"message": "Hello, this is the PDF Query API!"}
-
 
 @app.head("/")
 def head_root():
