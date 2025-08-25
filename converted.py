@@ -55,6 +55,7 @@ def clean_chunk(chunk: str) -> str:
 # Set up Gemini LLM
 llm = LLM(model="gemini/gemini-1.5-flash", api_key=GOOGLE_API_KEY)
 
+
 async def generate_agent_response(user_query: str, context_chunks: List[str]) -> str:
     cleaned_chunks = [clean_chunk(chunk)
                       for chunk in context_chunks if chunk.strip()]
@@ -66,11 +67,11 @@ async def generate_agent_response(user_query: str, context_chunks: List[str]) ->
         name="PDF Intelligence Analyst",
         role="Advanced PDF Content Interpreter",
         goal=(
-            "To extract, synthesize, and present comprehensive insights from academic or medical PDFs. "
+            "To extract, synthesize, and present comprehensive insights from academic PDFs. "
             "Every answer must be grounded in the provided context, prioritizing clarity, depth, and factual accuracy."
         ),
         backstory=(
-            "You are a highly capable AI trained to interpret complex academic and medical literature. "
+            "You are a highly capable AI trained to interpret complex academic literature. "
             "Your expertise lies in reading structured/unstructured content, understanding nuances, and delivering insightful, well-structured summaries. "
             "You never hallucinate or speculate. You are analytical, concise, and context-driven. "
             "You can handle difficult follow-up questions and clarify when data is insufficient. "
@@ -299,10 +300,6 @@ def chunk_and_embed(text, book_title, filename):
     ]
 
 
-# def store_pdf_in_pinecone(file_bytes: bytes, book_title: str, filename: str):
-#     text = parse_pdf_file(file_bytes)
-#     records = chunk_and_embed(text, book_title, filename)
-#     index.upsert(vectors=records, namespace="example-namespace")
 def store_file_in_pinecone(file_bytes: bytes, book_title: str, filename: str):
     ext = os.path.splitext(filename)[1].lower()
 
@@ -314,7 +311,7 @@ def store_file_in_pinecone(file_bytes: bytes, book_title: str, filename: str):
         raise ValueError(f"❌ Unsupported file type: {ext}")
 
     records = chunk_and_embed(text, book_title, filename)
-    index.upsert(vectors=records, namespace="example-namespace")
+    index.upsert(vectors=records, namespace="genai-rag-workshop")
 
 
 def enhance_prompt(user_query: str) -> str:
@@ -361,8 +358,8 @@ def retrieve_query_results(user_query: str):
     print("Keywords extracted:", keywords)
     results = index.query(
         vector=query_vector,
-        top_k=100,
-        namespace="example-namespace",
+        top_k=5,
+        namespace="genai-rag-workshop",
         include_metadata=True,
         # optional keyword filtering
         filter={"keywords": {"$in": keywords}}
@@ -398,7 +395,7 @@ def retrieve_query_results_me(user_query: str, book_names: List[str]):
     results = index.query(
         vector=query_vector,
         top_k=45,
-        namespace="example-namespace",
+        namespace="genai-workshop-rag",
         include_metadata=True,
         filter=filter_condition
     )
@@ -438,6 +435,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
         uploaded_titles.append(title)
     return {"message": "✅ Files processed successfully", "uploaded_titles": uploaded_titles}
 
+
 @app.post("/query/")
 async def query_pdf(req: QueryRequest):
     matches = retrieve_query_results(req.question)
@@ -475,6 +473,7 @@ async def query_pdf(req: QueryRequest):
         })
 
     return JSONResponse(content={"results": book_responses}, status_code=200)
+
 
 class QueryMeRequest(BaseModel):
     question: str
@@ -527,6 +526,7 @@ async def query_pdf_with_filter(req: QueryMeRequest):
 @app.get("/")
 def hello():
     return {"message": "Hello, this is the PDF Query API!"}
+
 
 @app.head("/")
 def head_root():
